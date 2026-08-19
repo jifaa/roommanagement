@@ -24,6 +24,10 @@ class Room {
     this.baseScale = 60; // pixels per meter at zoom 1.0
     this.doors = [];     // { id, wall, position, width }
     this.windows = [];   // { id, wall, position, width }
+    this.constraints = {
+      keepEmptyZones: [], // [{ id, name, left, top, right, bottom }]
+      relations: []       // [{ id, furnitureIdA, furnitureIdB, type: 'near'|'far'|'facing', weight: 1-10 }]
+    };
     this._nextId = 1;
   }
 
@@ -126,6 +130,73 @@ class Room {
     return win;
   }
 
+  /**
+   * Add a keep-empty zone constraint
+   * @param {object} zone - { left, top, right, bottom, name }
+   * @returns {object}
+   */
+  addKeepEmptyZone(zone) {
+    const left = Math.max(0, Math.min(zone.left, zone.right));
+    const right = Math.min(this.widthM, Math.max(zone.left, zone.right));
+    const top = Math.max(0, Math.min(zone.top, zone.bottom));
+    const bottom = Math.min(this.heightM, Math.max(zone.top, zone.bottom));
+    const count = this.constraints.keepEmptyZones.length + 1;
+
+    const newZone = {
+      id: zone.id || `zone_${this._nextId++}`,
+      type: 'keepEmptyZone',
+      name: zone.name || `Zona Kosong #${count}`,
+      left,
+      top,
+      right,
+      bottom
+    };
+    this.constraints.keepEmptyZones.push(newZone);
+    return newZone;
+  }
+
+  /**
+   * Add a furniture relation constraint
+   * @param {object} rel - { furnitureIdA, furnitureIdB, type: 'near'|'far'|'facing', weight: 1-10 }
+   * @returns {object}
+   */
+  addRelation(rel) {
+    const newRel = {
+      id: rel.id || `rel_${this._nextId++}`,
+      type: 'relation',
+      relationType: rel.type || rel.relationType || 'near',
+      furnitureIdA: rel.furnitureIdA,
+      furnitureIdB: rel.furnitureIdB,
+      weight: Math.max(1, Math.min(10, parseInt(rel.weight) || 5))
+    };
+    this.constraints.relations.push(newRel);
+    return newRel;
+  }
+
+  /** Remove any constraint by ID (zone or relation) */
+  removeConstraint(id) {
+    this.constraints.keepEmptyZones = this.constraints.keepEmptyZones.filter(z => z.id !== id);
+    this.constraints.relations = this.constraints.relations.filter(r => r.id !== id);
+  }
+
+  /** Remove keep-empty zone by ID */
+  removeKeepEmptyZone(id) {
+    this.constraints.keepEmptyZones = this.constraints.keepEmptyZones.filter(z => z.id !== id);
+  }
+
+  /** Remove relation by ID */
+  removeRelation(id) {
+    this.constraints.relations = this.constraints.relations.filter(r => r.id !== id);
+  }
+
+  /** Remove relations that refer to non-existent furniture */
+  cleanFurnitureRelations(validFurnitureIds) {
+    const idSet = new Set(validFurnitureIds);
+    this.constraints.relations = this.constraints.relations.filter(
+      r => idSet.has(r.furnitureIdA) && idSet.has(r.furnitureIdB)
+    );
+  }
+
   /** Remove a door or window by ID */
   removeElement(id) {
     this.doors = this.doors.filter(d => d.id !== id);
@@ -145,7 +216,11 @@ class Room {
       height: this.height,
       unit: this.unit,
       doors: [...this.doors],
-      windows: [...this.windows]
+      windows: [...this.windows],
+      constraints: {
+        keepEmptyZones: this.constraints.keepEmptyZones.map(z => ({ ...z })),
+        relations: this.constraints.relations.map(r => ({ ...r }))
+      }
     };
   }
 
@@ -154,10 +229,22 @@ class Room {
     const room = new Room(data.width, data.height, data.unit);
     room.doors = data.doors || [];
     room.windows = data.windows || [];
-    // Restore _nextId from existing elements
-    const allIds = [...room.doors, ...room.windows]
-      .map(e => parseInt(e.id.split('_')[1]) || 0);
+    room.constraints = {
+      keepEmptyZones: (data.constraints && data.constraints.keepEmptyZones) ? data.constraints.keepEmptyZones : [],
+      relations: (data.constraints && data.constraints.relations) ? data.constraints.relations : []
+    };
+
+    // Restore _nextId from all elements
+    const allElements = [
+      ...room.doors,
+      ...room.windows,
+      ...room.constraints.keepEmptyZones,
+      ...room.constraints.relations
+    ];
+    const allIds = allElements
+      .map(e => parseInt((e.id || '').split('_')[1]) || 0);
     room._nextId = allIds.length ? Math.max(...allIds) + 1 : 1;
     return room;
   }
 }
+

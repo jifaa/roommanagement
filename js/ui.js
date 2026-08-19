@@ -141,6 +141,126 @@ const UI = {
   },
 
   /**
+   * Update constraints list in sidebar (keepEmptyZones and furniture relations).
+   * @param {Room} room
+   * @param {Furniture[]} furnitureList
+   * @param {function} onDeleteConstraint — callback(constraintId)
+   */
+  updateConstraintsList(room, furnitureList, onDeleteConstraint) {
+    const container = document.getElementById('constraints-list');
+    if (!container) return;
+
+    const keepEmptyZones = (room && room.constraints && room.constraints.keepEmptyZones) ? room.constraints.keepEmptyZones : [];
+    const relations = (room && room.constraints && room.constraints.relations) ? room.constraints.relations : [];
+
+    if (keepEmptyZones.length === 0 && relations.length === 0) {
+      container.innerHTML = '<div class="empty-state-hint">Belum ada zona kosong atau relasi</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    const furnMap = {};
+    (furnitureList || []).forEach(f => { furnMap[f.id] = f; });
+
+    // 1. Render Keep-Empty Zones
+    keepEmptyZones.forEach(z => {
+      const item = document.createElement('div');
+      item.className = 'constraint-item constraint-zone';
+      const w = (Math.abs(z.right - z.left)).toFixed(1);
+      const h = (Math.abs(z.bottom - z.top)).toFixed(1);
+      item.innerHTML = `
+        <div class="constraint-info">
+          <span class="constraint-icon" style="color:#ef4444">${Icons.get('ban', 14)}</span>
+          <div class="constraint-text">
+            <span class="constraint-name">${z.name || 'Zona Kosong'}</span>
+            <span class="constraint-detail">${w}×${h}m (@${z.left.toFixed(1)}, ${z.top.toFixed(1)})</span>
+          </div>
+        </div>
+        <button type="button" class="constraint-delete" title="Hapus">${Icons.get('x', 12)}</button>
+      `;
+      item.querySelector('.constraint-delete').addEventListener('click', () => {
+        onDeleteConstraint(z.id);
+      });
+      container.appendChild(item);
+    });
+
+    // 2. Render Relations
+    relations.forEach(r => {
+      const a = furnMap[r.furnitureIdA];
+      const b = furnMap[r.furnitureIdB];
+      const nameA = a ? a.name : 'Item';
+      const nameB = b ? b.name : 'Item';
+
+      const type = r.type || r.relationType || 'near';
+      let typeLabel = 'Harus Dekat';
+      let typeColor = '#22d3ee';
+      let iconName = 'link';
+
+      if (type === 'far') {
+        typeLabel = 'Harus Jauh';
+        typeColor = '#f43f5e';
+        iconName = 'ban';
+      } else if (type === 'facing') {
+        typeLabel = 'Harus Menghadap';
+        typeColor = '#a855f7';
+        iconName = 'eye';
+      }
+
+      const item = document.createElement('div');
+      item.className = 'constraint-item constraint-relation';
+      item.innerHTML = `
+        <div class="constraint-info">
+          <span class="constraint-icon" style="color:${typeColor}">${Icons.get(iconName, 14)}</span>
+          <div class="constraint-text">
+            <span class="constraint-name">${nameA} ↔ ${nameB}</span>
+            <span class="constraint-detail">${typeLabel} • Prioritas: ${r.weight || 5}/10</span>
+          </div>
+        </div>
+        <button type="button" class="constraint-delete" title="Hapus">${Icons.get('x', 12)}</button>
+      `;
+      item.querySelector('.constraint-delete').addEventListener('click', () => {
+        onDeleteConstraint(r.id);
+      });
+      container.appendChild(item);
+    });
+  },
+
+  /**
+   * Populate the Relation Modal dropdowns with current furniture.
+   * @param {Furniture[]} furnitureList
+   * @param {Furniture} [preselectedA]
+   * @param {Furniture} [preselectedB]
+   */
+  populateRelationModal(furnitureList, preselectedA, preselectedB) {
+    const selectA = document.getElementById('relation-furn-a');
+    const selectB = document.getElementById('relation-furn-b');
+    if (!selectA || !selectB) return;
+
+    selectA.innerHTML = '';
+    selectB.innerHTML = '';
+
+    furnitureList.forEach(f => {
+      const optA = document.createElement('option');
+      optA.value = f.id;
+      optA.textContent = `${f.name} (${f.width}×${f.height}m)`;
+      selectA.appendChild(optA);
+
+      const optB = document.createElement('option');
+      optB.value = f.id;
+      optB.textContent = `${f.name} (${f.width}×${f.height}m)`;
+      selectB.appendChild(optB);
+    });
+
+    if (preselectedA) selectA.value = preselectedA.id;
+    if (preselectedB) {
+      selectB.value = preselectedB.id;
+    } else if (furnitureList.length > 1) {
+      const other = furnitureList.find(f => f.id !== selectA.value);
+      if (other) selectB.value = other.id;
+    }
+  },
+
+  /**
    * Update the furniture properties editor panel.
    * @param {Furniture|null} furn
    * @param {object} callbacks — { onUpdate, onDelete, onDuplicate, onRotate }

@@ -39,6 +39,9 @@ const ExportPNG = {
     // Draw doors & windows
     this._drawWallElements(ctx, room, scale);
 
+    // Draw keep-empty zones
+    this._drawKeepEmptyZones(ctx, room, scale);
+
     // Draw furniture
     furnitureList.forEach(f => {
       this._drawFurniture(ctx, f, scale);
@@ -249,6 +252,42 @@ const ExportPNG = {
     ctx.beginPath(); ctx.moveTo(-25, 0); ctx.lineTo(-25, h); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-30, 0); ctx.lineTo(-20, 0); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-30, h); ctx.lineTo(-20, h); ctx.stroke();
+  },
+
+  _drawKeepEmptyZones(ctx, room, scale) {
+    if (!room.constraints || !room.constraints.keepEmptyZones) return;
+
+    room.constraints.keepEmptyZones.forEach(z => {
+      const left = Math.min(z.left, z.right) * scale;
+      const top = Math.min(z.top, z.bottom) * scale;
+      const width = Math.abs(z.right - z.left) * scale;
+      const height = Math.abs(z.bottom - z.top) * scale;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+      ctx.fillRect(left, top, width, height);
+
+      // Hatch
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(left, top, width, height);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
+      ctx.lineWidth = 1.5;
+      for (let offset = -height; offset <= width; offset += 12) {
+        ctx.beginPath();
+        ctx.moveTo(left + offset, top);
+        ctx.lineTo(left + offset + height, top + height);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(left, top, width, height);
+      ctx.restore();
+    });
   },
 
   _roundRect(ctx, x, y, w, h, r) {

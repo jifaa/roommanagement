@@ -63,6 +63,18 @@
           <span data-icon="pencil" data-icon-size="14"></span> Custom Furniture
         </button>
 
+        <!-- Layout Constraints -->
+        <div class="section-title">Layout Constraints</div>
+        <div class="action-row">
+          <button type="button" class="btn" id="btn-draw-zone" title="Gambar area yang harus tetap kosong"><span data-icon="ban" data-icon-size="14"></span> Zona Kosong</button>
+          <button type="button" class="btn" id="btn-add-relation" title="Atur relasi posisi antar furnitur"><span data-icon="link" data-icon-size="14"></span> Atur Relasi</button>
+        </div>
+        <div id="draw-zone-guide" class="draw-zone-guide hidden">
+          <span class="guide-dot"></span>
+          <span>Klik & drag di kanvas untuk menggambar zona kosong. Tekan <kbd>Esc</kbd> untuk batal.</span>
+        </div>
+        <div id="constraints-list" class="constraints-list"></div>
+
         <!-- Floor Area Info -->
         <div class="section-title">Floor Area</div>
         <div id="floor-info">
@@ -75,7 +87,7 @@
           <span data-icon="sparkles" data-icon-size="16"></span>
           <span>Susun Otomatis</span>
         </button>
-        <div class="auto-arrange-hint">Atur posisi furnitur secara otomatis agar nyaman dan rapi</div>
+        <div class="auto-arrange-hint">Atur posisi furnitur secara otomatis dengan Simulated Annealing</div>
 
         <!-- Keyboard Shortcuts -->
         <div class="shortcuts-info">
@@ -306,6 +318,53 @@
     </div>
   </div>
 
+  <!-- Relation Modal -->
+  <div class="modal" id="relation-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title"><span data-icon="link" data-icon-size="18"></span> Atur Relasi Antar Furnitur</h2>
+        <button class="modal-close"><span data-icon="x" data-icon-size="16"></span></button>
+      </div>
+      <form id="relation-form">
+        <div class="form-row" style="margin-bottom:14px">
+          <div class="form-group" style="flex:1">
+            <label class="form-label" for="relation-furn-a">Furnitur A</label>
+            <select id="relation-furn-a" class="form-select" required></select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label" for="relation-furn-b">Furnitur B</label>
+            <select id="relation-furn-b" class="form-select" required></select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label" for="relation-type">Tipe Hubungan</label>
+          <select id="relation-type" class="form-select" required>
+            <option value="near">Harus Dekat (Close proximity)</option>
+            <option value="far">Harus Jauh (Separated/Spaced apart)</option>
+            <option value="facing">Harus Menghadap (Furnitur A menghadap B)</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:18px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
+            <label class="form-label" for="relation-weight" style="margin-bottom:0">Prioritas / Bobot</label>
+            <span id="relation-weight-val" style="font-weight:600; color:var(--accent-cyan)">5 / 10</span>
+          </div>
+          <input type="range" id="relation-weight" min="1" max="10" value="5" class="form-range">
+          <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-top:2px">
+            <span>Rendah (1)</span>
+            <span>Sedang (5)</span>
+            <span>Mutlak (10)</span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Simpan Relasi</button>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
@@ -322,6 +381,8 @@
   <script src="js/export.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/autoarrange.js"></script>
+  <script src="js/costfunction.js"></script>
+  <script src="js/simulatedannealing.js"></script>
   <script src="js/app.js"></script>
   <script>
     // Hydrate all data-icon placeholders with SVG icons

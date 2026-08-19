@@ -17,6 +17,7 @@ class CanvasRenderer {
     this.selectedFurniture = null;
     this.hoveredFurniture = null;
     this.isDragging = false;
+    this.drawingZone = null;
     this._animFrame = null;
     this._needsRender = true;
 
@@ -115,18 +116,27 @@ class CanvasRenderer {
     // 3. Doors & windows
     this._drawWallElements(ctx, ppm);
 
-    // 4. Snap guides
+    // 4. Keep-Empty Zones
+    this._drawKeepEmptyZones(ctx, ppm);
+
+    // 5. Active Zone Drawing Preview
+    this._drawDrawingZone(ctx, ppm);
+
+    // 6. Snap guides
     this._drawSnapGuides(ctx, ppm);
 
-    // 5. Furniture
+    // 7. Relations (visual connection lines between related furniture)
+    this._drawRelations(ctx, ppm);
+
+    // 8. Furniture
     this._drawAllFurniture(ctx, ppm);
 
-    // 6. Dimension labels
+    // 9. Dimension labels
     this._drawDimensionLabels(ctx, ppm);
 
     ctx.restore();
 
-    // 7. Overlay info (zoom level)
+    // 10. Overlay info (zoom level)
     this._drawOverlay(ctx);
 
     ctx.restore();
@@ -549,6 +559,149 @@ class CanvasRenderer {
     }
   }
 
+  // ─── Keep-Empty Zones ─────────────────────────────────
+
+  _drawKeepEmptyZones(ctx, ppm) {
+    if (!this.room || !this.room.constraints || !this.room.constraints.keepEmptyZones) return;
+
+    const zones = this.room.constraints.keepEmptyZones;
+    zones.forEach(z => {
+      this._drawSingleZone(ctx, z, ppm, false);
+    });
+  }
+
+  _drawDrawingZone(ctx, ppm) {
+    if (this.drawingZone) {
+      this._drawSingleZone(ctx, this.drawingZone, ppm, true);
+    }
+  }
+
+  _drawSingleZone(ctx, z, ppm, isPreview = false) {
+    const left = Math.min(z.left, z.right) * ppm;
+    const top = Math.min(z.top, z.bottom) * ppm;
+    const width = Math.abs(z.right - z.left) * ppm;
+    const height = Math.abs(z.bottom - z.top) * ppm;
+
+    if (width <= 0 || height <= 0) return;
+
+    ctx.save();
+
+    // 1. Semi-transparent background fill
+    ctx.fillStyle = isPreview ? 'rgba(245, 158, 11, 0.18)' : 'rgba(239, 68, 68, 0.12)';
+    ctx.fillRect(left, top, width, height);
+
+    // 2. Diagonal hatch pattern
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, top, width, height);
+    ctx.clip();
+
+    ctx.strokeStyle = isPreview ? 'rgba(245, 158, 11, 0.35)' : 'rgba(239, 68, 68, 0.25)';
+    ctx.lineWidth = 1.5;
+    const spacing = 12;
+    const maxDim = width + height;
+    for (let offset = -height; offset <= width; offset += spacing) {
+      ctx.beginPath();
+      ctx.moveTo(left + offset, top);
+      ctx.lineTo(left + offset + height, top + height);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 3. Dashed border
+    ctx.strokeStyle = isPreview ? '#f59e0b' : '#ef4444';
+    ctx.lineWidth = isPreview ? 2 : 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(left, top, width, height);
+    ctx.setLineDash([]);
+
+    // 4. Badge label
+    const labelText = isPreview ? '➕ Zona Baru' : (z.name || 'Zona Kosong');
+    ctx.font = '500 11px Inter, sans-serif';
+    const textWidth = ctx.measureText(labelText).width;
+    const badgeW = textWidth + 14;
+    const badgeH = 18;
+
+    if (width > badgeW + 8 && height > badgeH + 8) {
+      ctx.fillStyle = isPreview ? 'rgba(245, 158, 11, 0.85)' : 'rgba(239, 68, 68, 0.85)';
+      this._roundRect(ctx, left + 4, top + 4, badgeW, badgeH, 4);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labelText, left + 10, top + 4 + badgeH / 2);
+    }
+
+    ctx.restore();
+  }
+
+  // ─── Relations Rendering ──────────────────────────────
+
+  _drawRelations(ctx, ppm) {
+    if (!this.room || !this.room.constraints || !this.room.constraints.relations) return;
+    const relations = this.room.constraints.relations;
+    if (relations.length === 0) return;
+
+    const map = {};
+    this.furnitureList.forEach(f => { map[f.id] = f; });
+
+    relations.forEach(r => {
+      const a = map[r.furnitureIdA];
+      const b = map[r.furnitureIdB];
+      if (!a || !b) return;
+
+      const ax = a.x * ppm;
+      const ay = a.y * ppm;
+      const bx = b.x * ppm;
+      const by = b.y * ppm;
+
+      ctx.save();
+
+      // Line style based on relation type
+      let color = 'rgba(34, 211, 238, 0.4)';
+      let label = 'Dekat';
+      const type = r.type || r.relationType || 'near';
+
+      if (type === 'far') {
+        color = 'rgba(244, 63, 94, 0.45)';
+        label = 'Jauh';
+      } else if (type === 'facing') {
+        color = 'rgba(168, 85, 247, 0.45)';
+        label = 'Menghadap';
+      }
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Small badge at midpoint
+      const midX = (ax + bx) / 2;
+      const midY = (ay + by) / 2;
+      const badgeText = `${label} (${r.weight || 5})`;
+
+      ctx.font = '10px "JetBrains Mono", monospace';
+      const tw = ctx.measureText(badgeText).width;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+      ctx.fillRect(midX - tw / 2 - 4, midY - 8, tw + 8, 16);
+      ctx.strokeStyle = color;
+      ctx.strokeRect(midX - tw / 2 - 4, midY - 8, tw + 8, 16);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(badgeText, midX, midY);
+
+      ctx.restore();
+    });
+  }
+
   // ─── Helpers ──────────────────────────────────────────
 
   _roundRect(ctx, x, y, w, h, r) {
@@ -565,3 +718,4 @@ class CanvasRenderer {
     ctx.closePath();
   }
 }
+

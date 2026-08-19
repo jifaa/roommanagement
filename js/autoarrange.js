@@ -204,6 +204,18 @@ const AutoArrange = {
       }
     });
 
+    // User-defined Keep-Empty Zones
+    if (room.constraints && room.constraints.keepEmptyZones) {
+      room.constraints.keepEmptyZones.forEach(z => {
+        zones.push({
+          left: Math.min(z.left, z.right),
+          top: Math.min(z.top, z.bottom),
+          right: Math.max(z.left, z.right),
+          bottom: Math.max(z.top, z.bottom)
+        });
+      });
+    }
+
     return zones;
   },
 

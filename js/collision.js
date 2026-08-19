@@ -4,6 +4,18 @@
  */
 
 const Collision = {
+  /** Get axis-aligned bounding box for a furniture item */
+  getBounds(furn) {
+    return furn.bounds;
+  },
+
+  /** Calculate overlap area in m² between two bounding boxes */
+  rectOverlapArea(r1, r2) {
+    const ox = Math.max(0, Math.min(r1.right, r2.right) - Math.max(r1.left, r2.left));
+    const oy = Math.max(0, Math.min(r1.bottom, r2.bottom) - Math.max(r1.top, r2.top));
+    return ox * oy;
+  },
+
   /**
    * Check AABB overlap between two furniture items (axis-aligned).
    * Works correctly for 0/90/180/270 degree rotations because

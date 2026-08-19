@@ -18,7 +18,9 @@ class InteractionController {
     this.furnitureList = [];
     this.zoomCtrl = null;
 
-    // Drag state
+    // Mode & Drag state
+    this.mode = 'select'; // 'select' | 'draw_zone'
+    this.drawZoneStart = null;
     this.isDragging = false;
     this.dragTarget = null;
     this.dragOffsetX = 0;
@@ -26,9 +28,24 @@ class InteractionController {
 
     // Selection
     this.selectedFurniture = null;
+    this.multiSelectedFurniture = [];
 
     // Bind events
     this._bindEvents();
+  }
+
+  startDrawZoneMode() {
+    this.mode = 'draw_zone';
+    this.deselect();
+    this.canvas.style.cursor = 'crosshair';
+  }
+
+  cancelDrawZoneMode() {
+    this.mode = 'select';
+    this.drawZoneStart = null;
+    this.renderer.drawingZone = null;
+    this.canvas.style.cursor = 'default';
+    this.renderer.requestRender();
   }
 
   init(room, furnitureList, zoomCtrl) {
@@ -133,6 +150,19 @@ class InteractionController {
     if (e.button !== 0) return;
 
     const canvasPos = this._getCanvasPos(e);
+    const roomPos = this._getRoomPos(canvasPos);
+
+    // If in Draw Zone mode
+    if (this.mode === 'draw_zone') {
+      const rw = this.room.widthM;
+      const rh = this.room.heightM;
+      const clampedX = Math.max(0, Math.min(rw, roomPos.x));
+      const clampedY = Math.max(0, Math.min(rh, roomPos.y));
+      this.drawZoneStart = { x: clampedX, y: clampedY };
+      this.renderer.drawingZone = { left: clampedX, top: clampedY, right: clampedX, bottom: clampedY };
+      this.renderer.requestRender();
+      return;
+    }
 
     // Check rotate handle first
     if (this._hitRotateHandle(canvasPos)) {
@@ -146,10 +176,17 @@ class InteractionController {
       return;
     }
 
-    const roomPos = this._getRoomPos(canvasPos);
     const hit = this._hitTest(roomPos.x, roomPos.y);
 
     if (hit) {
+      // Check for Shift multi-selection (to create a relation between 2 pieces)
+      if (e.shiftKey && this.selectedFurniture && this.selectedFurniture !== hit) {
+        const first = this.selectedFurniture;
+        this.select(hit);
+        this.onChange('multi_select', [first, hit]);
+        return;
+      }
+
       this.select(hit);
       this.isDragging = true;
       this.dragTarget = hit;
@@ -171,6 +208,26 @@ class InteractionController {
 
     const canvasPos = this._getCanvasPos(e);
     const roomPos = this._getRoomPos(canvasPos);
+
+    // Zone drawing mode
+    if (this.mode === 'draw_zone') {
+      this.canvas.style.cursor = 'crosshair';
+      if (this.drawZoneStart) {
+        const rw = this.room.widthM;
+        const rh = this.room.heightM;
+        const clampedX = Math.max(0, Math.min(rw, roomPos.x));
+        const clampedY = Math.max(0, Math.min(rh, roomPos.y));
+
+        this.renderer.drawingZone = {
+          left: Math.min(this.drawZoneStart.x, clampedX),
+          top: Math.min(this.drawZoneStart.y, clampedY),
+          right: Math.max(this.drawZoneStart.x, clampedX),
+          bottom: Math.max(this.drawZoneStart.y, clampedY)
+        };
+        this.renderer.requestRender();
+      }
+      return;
+    }
 
     if (this.isDragging && this.dragTarget) {
       // Move furniture
@@ -217,6 +274,24 @@ class InteractionController {
   _onMouseUp(e) {
     if (this.zoomCtrl.isPanning) {
       this.zoomCtrl.endPan();
+      return;
+    }
+
+    if (this.mode === 'draw_zone') {
+      if (this.drawZoneStart && this.renderer.drawingZone) {
+        const z = this.renderer.drawingZone;
+        const w = z.right - z.left;
+        const h = z.bottom - z.top;
+        if (w >= 0.2 && h >= 0.2) {
+          this.onChange('add_zone', z);
+        }
+      }
+      this.drawZoneStart = null;
+      this.renderer.drawingZone = null;
+      this.mode = 'select';
+      this.canvas.style.cursor = 'default';
+      this.renderer.requestRender();
+      this.onChange('exit_draw_zone');
       return;
     }
 
@@ -344,7 +419,12 @@ class InteractionController {
         break;
 
       case 'Escape':
-        this.deselect();
+        if (this.mode === 'draw_zone') {
+          this.cancelDrawZoneMode();
+          this.onChange('exit_draw_zone');
+        } else {
+          this.deselect();
+        }
         break;
 
       case 'd':

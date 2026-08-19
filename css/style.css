@@ -1218,3 +1218,170 @@ body.modal-open {
   padding: 6px 8px 0;
   line-height: 1.4;
 }
+
+/* ─── Constraints UI ─────────────────────────────────── */
+.draw-zone-guide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px dashed rgba(245, 158, 11, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #fbbf24;
+  line-height: 1.4;
+  margin-top: 8px;
+  animation: pulse-border 2s infinite ease-in-out;
+}
+
+.draw-zone-guide.hidden {
+  display: none;
+}
+
+.draw-zone-guide .guide-dot {
+  width: 8px;
+  height: 8px;
+  background: #f59e0b;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #f59e0b;
+  flex-shrink: 0;
+}
+
+.draw-zone-guide kbd {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(245, 158, 11, 0.3); }
+  50% { border-color: rgba(245, 158, 11, 0.7); box-shadow: 0 0 10px rgba(245, 158, 11, 0.15); }
+}
+
+.btn.btn-active {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.constraints-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.constraint-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transition: all var(--transition);
+}
+
+.constraint-item:hover {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.constraint-item.constraint-zone {
+  border-left: 3px solid #ef4444;
+}
+
+.constraint-item.constraint-relation {
+  border-left: 3px solid #22d3ee;
+}
+
+.constraint-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.constraint-icon {
+  flex-shrink: 0;
+  display: flex;
+}
+
+.constraint-text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.constraint-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.constraint-detail {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.constraint-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+.constraint-delete:hover {
+  color: var(--error);
+  background: rgba(248, 113, 113, 0.15);
+}
+
+.empty-state-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 4px;
+  font-style: italic;
+}
+
+/* ─── Form Range Slider ──────────────────────────────── */
+.form-range {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.2);
+  outline: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.form-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.form-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+

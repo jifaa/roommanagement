@@ -67,6 +67,7 @@ class App {
     this._updateFloorInfo();
     this._updateRoomForm();
     this._refreshWallElementsList();
+    this._refreshConstraintsList();
   }
 
   _updateRoomForm() {
@@ -115,6 +116,11 @@ class App {
     if (idx > -1) {
       this.furnitureList.splice(idx, 1);
       this.interaction.deselect();
+      // Clean up any relations referring to deleted furniture
+      if (this.room) {
+        this.room.cleanFurnitureRelations(this.furnitureList.map(f => f.id));
+        this._refreshConstraintsList();
+      }
       Collision.checkAll(this.furnitureList, this.room);
       this.renderer.requestRender();
       this._updateFloorInfo();
@@ -137,10 +143,10 @@ class App {
 
   // ─── Interaction Callback ─────────────────────────────
 
-  _onInteraction(action, furn) {
+  _onInteraction(action, data) {
     switch (action) {
       case 'select':
-        UI.updatePropertyPanel(furn, {
+        UI.updatePropertyPanel(data, {
           onUpdate: (f) => this._onPropertyUpdate(f),
           onDelete: (f) => this._deleteFurniture(f),
           onDuplicate: (f) => this._duplicateFurniture(f),
@@ -160,6 +166,30 @@ class App {
         });
         break;
 
+      case 'multi_select':
+        if (Array.isArray(data) && data.length >= 2) {
+          UI.openModal('relation-modal');
+          UI.populateRelationModal(this.furnitureList, data[0], data[1]);
+        }
+        break;
+
+      case 'add_zone':
+        if (this.room && data) {
+          this.room.addKeepEmptyZone(data);
+          this.renderer.requestRender();
+          this._refreshConstraintsList();
+          Storage.autoSave(this.room, this.furnitureList);
+          UI.toast('Zona kosong berhasil ditambahkan', 'success');
+        }
+        break;
+
+      case 'exit_draw_zone':
+        const drawBtn = document.getElementById('btn-draw-zone');
+        if (drawBtn) drawBtn.classList.remove('btn-active');
+        const guide = document.getElementById('draw-zone-guide');
+        if (guide) guide.classList.add('hidden');
+        break;
+
       case 'move':
       case 'drop':
       case 'rotate':
@@ -168,15 +198,14 @@ class App {
         break;
 
       case 'delete':
-        this._deleteFurniture(furn);
+        this._deleteFurniture(data);
         break;
 
       case 'duplicate':
-        this._duplicateFurniture(furn);
+        this._duplicateFurniture(data);
         break;
 
       case 'edit':
-        // Scroll property panel into view if on mobile
         const propPanel = document.getElementById('property-panel');
         if (propPanel && window.innerWidth < 768) {
           propPanel.scrollIntoView({ behavior: 'smooth' });
@@ -206,9 +235,9 @@ class App {
     }
   }
 
-  // ─── Auto-Arrange ─────────────────────────────────────
+  // ─── Auto-Arrange with Simulated Annealing Refinement ──
 
-  _autoArrange() {
+  async _autoArrange() {
     if (!this.isRoomCreated || this.furnitureList.length === 0) {
       UI.toast('Tambahkan furnitur terlebih dahulu', 'warning');
       return;
@@ -220,68 +249,118 @@ class App {
     // Deselect any currently selected furniture
     this.interaction.deselect();
 
-    // Run the auto-arrange algorithm
-    const moves = AutoArrange.arrange(this.room, this.furnitureList);
+    // Save starting positions for smooth animation
+    const moves = this.furnitureList.map(f => ({
+      furn: f,
+      oldX: f.x,
+      oldY: f.y,
+      oldRot: f.rotation,
+      newX: f.x,
+      newY: f.y,
+      newRot: f.rotation
+    }));
 
-    // Animate: restore old positions, then lerp to new
-    const duration = 600; // ms
-    const startTime = performance.now();
+    try {
+      // ── Stage 1: Rule-Based Heuristic Auto-Arrange (Base Placement) ──
+      AutoArrange.arrange(this.room, this.furnitureList);
 
-    // Store new positions and restore old ones for animation start
-    moves.forEach(m => {
-      m.furn.x = m.oldX;
-      m.furn.y = m.oldY;
-      m.furn.rotation = m.oldRot;
-    });
-
-    const animate = (now) => {
-      const elapsed = now - startTime;
-      const t = Math.min(1, elapsed / duration);
-      // Ease out cubic
-      const ease = 1 - Math.pow(1 - t, 3);
-
-      moves.forEach(m => {
-        m.furn.x = m.oldX + (m.newX - m.oldX) * ease;
-        m.furn.y = m.oldY + (m.newY - m.oldY) * ease;
-
-        // Lerp rotation (handle wrap-around)
-        let dRot = m.newRot - m.oldRot;
-        if (dRot > 180) dRot -= 360;
-        if (dRot < -180) dRot += 360;
-        m.furn.rotation = ((m.oldRot + dRot * ease) % 360 + 360) % 360;
+      // ── Stage 2: Simulated Annealing Refinement (Constraint Optimization) ──
+      const saResult = await SimulatedAnnealing.refine(this.furnitureList, this.room, {
+        initialTemp: 1000,
+        coolingRate: 0.995,
+        minTemp: 1,
+        maxIterations: 5000,
+        timeBudgetMs: 3500
       });
 
-      this.renderer.requestRender();
-      this.renderer.renderNow();
+      // Match SA results with furniture list
+      if (saResult && saResult.furnitureList && saResult.furnitureList.length > 0) {
+        const saMap = {};
+        saResult.furnitureList.forEach(item => { saMap[item.id] = item; });
 
-      if (t < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        // Finalize exact positions
         moves.forEach(m => {
-          m.furn.x = m.newX;
-          m.furn.y = m.newY;
-          m.furn.rotation = m.newRot;
+          const saPos = saMap[m.furn.id];
+          if (saPos) {
+            m.newX = saPos.x;
+            m.newY = saPos.y;
+            m.newRot = saPos.rotation;
+          } else {
+            m.newX = m.furn.x;
+            m.newY = m.furn.y;
+            m.newRot = m.furn.rotation;
+          }
+        });
+      }
+
+      // Animate: restore old positions, then lerp smoothly to new positions
+      const duration = 650; // ms
+      const startTime = performance.now();
+
+      moves.forEach(m => {
+        m.furn.x = m.oldX;
+        m.furn.y = m.oldY;
+        m.furn.rotation = m.oldRot;
+      });
+
+      const animate = (now) => {
+        const elapsed = now - startTime;
+        const t = Math.min(1, elapsed / duration);
+        // Ease out cubic
+        const ease = 1 - Math.pow(1 - t, 3);
+
+        moves.forEach(m => {
+          m.furn.x = m.oldX + (m.newX - m.oldX) * ease;
+          m.furn.y = m.oldY + (m.newY - m.oldY) * ease;
+
+          // Lerp rotation (handle wrap-around)
+          let dRot = m.newRot - m.oldRot;
+          if (dRot > 180) dRot -= 360;
+          if (dRot < -180) dRot += 360;
+          m.furn.rotation = ((m.oldRot + dRot * ease) % 360 + 360) % 360;
         });
 
-        // Final collision check & update
-        Collision.checkAll(this.furnitureList, this.room);
         this.renderer.requestRender();
-        this._updateFloorInfo();
-        Storage.autoSave(this.room, this.furnitureList);
+        this.renderer.renderNow();
 
-        btn.classList.remove('arranging');
-
-        const collisions = this.furnitureList.filter(f => f.isColliding).length;
-        if (collisions > 0) {
-          UI.toast(`Susun otomatis selesai! ${collisions} item masih bertabrakan — coba kurangi furnitur`, 'warning');
+        if (t < 1) {
+          requestAnimationFrame(animate);
         } else {
-          UI.toast('✨ Furnitur berhasil disusun otomatis!', 'success');
-        }
-      }
-    };
+          // Finalize exact positions
+          moves.forEach(m => {
+            m.furn.x = m.newX;
+            m.furn.y = m.newY;
+            m.furn.rotation = m.newRot;
+          });
 
-    requestAnimationFrame(animate);
+          // Final collision check & update
+          Collision.checkAll(this.furnitureList, this.room);
+          this.renderer.requestRender();
+          this._updateFloorInfo();
+          Storage.autoSave(this.room, this.furnitureList);
+
+          btn.classList.remove('arranging');
+
+          const comfortScore = (saResult && saResult.comfortScore !== undefined) ? saResult.comfortScore : 90;
+          const violations = saResult ? saResult.violations : null;
+
+          if (violations && violations.details && violations.details.length > 0) {
+            UI.toast(`Layout dioptimalkan — Skor kenyamanan: ${comfortScore}/100`, 'info');
+            setTimeout(() => {
+              UI.toast(`⚠️ Catatan: ${violations.details[0]}`, 'warning', 4500);
+            }, 600);
+          } else {
+            UI.toast(`✨ Layout berhasil disusun — Skor kenyamanan: ${comfortScore}/100!`, 'success');
+          }
+        }
+      };
+
+      requestAnimationFrame(animate);
+
+    } catch (err) {
+      console.error('Error during auto-arrange:', err);
+      btn.classList.remove('arranging');
+      UI.toast('Terjadi kesalahan saat menyusun otomatis', 'error');
+    }
   }
 
   // ─── Wall Elements ────────────────────────────────────
@@ -322,6 +401,22 @@ class App {
     UI.updateWallElementsList(this.room, (id) => this._deleteWallElement(id));
   }
 
+  // ─── Constraints Management ───────────────────────────
+
+  _deleteConstraint(constraintId) {
+    if (!this.room) return;
+    this.room.removeConstraint(constraintId);
+    this.renderer.requestRender();
+    this._refreshConstraintsList();
+    Storage.autoSave(this.room, this.furnitureList);
+    UI.toast('Aturan berhasil dihapus', 'info');
+  }
+
+  _refreshConstraintsList() {
+    if (!this.room) return;
+    UI.updateConstraintsList(this.room, this.furnitureList, (id) => this._deleteConstraint(id));
+  }
+
   // ─── UI Event Bindings ────────────────────────────────
 
   _bindUIEvents() {
@@ -354,6 +449,91 @@ class App {
         this._createRoom(width, height, unit);
       }
     });
+
+    // Draw Zone button toggle
+    const btnDrawZone = document.getElementById('btn-draw-zone');
+    const drawZoneGuide = document.getElementById('draw-zone-guide');
+    if (btnDrawZone) {
+      btnDrawZone.addEventListener('click', () => {
+        if (!this.isRoomCreated) {
+          UI.toast('Buat ruangan terlebih dahulu', 'warning');
+          return;
+        }
+
+        if (this.interaction.mode === 'draw_zone') {
+          this.interaction.cancelDrawZoneMode();
+          btnDrawZone.classList.remove('btn-active');
+          if (drawZoneGuide) drawZoneGuide.classList.add('hidden');
+        } else {
+          this.interaction.startDrawZoneMode();
+          btnDrawZone.classList.add('btn-active');
+          if (drawZoneGuide) drawZoneGuide.classList.remove('hidden');
+          UI.toast('Mode Gambar: Drag pada kanvas untuk membuat zona kosong', 'info');
+        }
+      });
+    }
+
+    // Add Relation button & Modal
+    const btnAddRelation = document.getElementById('btn-add-relation');
+    if (btnAddRelation) {
+      btnAddRelation.addEventListener('click', () => {
+        if (!this.isRoomCreated) {
+          UI.toast('Buat ruangan terlebih dahulu', 'warning');
+          return;
+        }
+        if (this.furnitureList.length < 2) {
+          UI.toast('Tambahkan minimal 2 furnitur untuk membuat relasi', 'warning');
+          return;
+        }
+
+        UI.openModal('relation-modal');
+        UI.populateRelationModal(this.furnitureList, this.interaction.selectedFurniture);
+      });
+    }
+
+    // Relation weight range input
+    const relationWeight = document.getElementById('relation-weight');
+    const relationWeightVal = document.getElementById('relation-weight-val');
+    if (relationWeight && relationWeightVal) {
+      relationWeight.addEventListener('input', (e) => {
+        relationWeightVal.textContent = `${e.target.value} / 10`;
+      });
+    }
+
+    // Relation form submit
+    const relationForm = document.getElementById('relation-form');
+    if (relationForm) {
+      relationForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const furnA = document.getElementById('relation-furn-a').value;
+        const furnB = document.getElementById('relation-furn-b').value;
+        const type = document.getElementById('relation-type').value;
+        const weight = parseInt(document.getElementById('relation-weight').value) || 5;
+
+        if (!furnA || !furnB) {
+          UI.toast('Pilih furnitur yang ingin dihubungkan', 'error');
+          return;
+        }
+
+        if (furnA === furnB) {
+          UI.toast('Pilih dua furnitur yang berbeda', 'warning');
+          return;
+        }
+
+        this.room.addRelation({
+          furnitureIdA: furnA,
+          furnitureIdB: furnB,
+          type,
+          weight
+        });
+
+        this.renderer.requestRender();
+        this._refreshConstraintsList();
+        Storage.autoSave(this.room, this.furnitureList);
+        UI.closeModal('relation-modal');
+        UI.toast('Relasi furnitur berhasil ditambahkan', 'success');
+      });
+    }
 
     // Custom furniture modal
     document.getElementById('btn-add-custom').addEventListener('click', () => {
