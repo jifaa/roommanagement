@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Interactive 2D room layout designer with drag & drop furniture placement, collision detection, and export capabilities.">
+  <title>Room Layout Designer — 2D Floor Planner</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2322d3ee%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8%22/><path d=%22M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/></svg>">
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="app-logo">
+          <div class="app-logo-icon" data-icon="home" data-icon-size="20"></div>
+          <span class="app-logo-text">Room Designer</span>
+        </div>
+        <div class="app-subtitle">2D Floor Plan Editor</div>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- Room Dimensions -->
+        <div class="section-title">Room Dimensions</div>
+        <form id="room-form">
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label class="form-label" for="room-width">Width</label>
+              <input type="number" id="room-width" class="form-input" value="5" min="0.5" max="50" step="0.1" required>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label class="form-label" for="room-height">Length</label>
+              <input type="number" id="room-height" class="form-input" value="4" min="0.5" max="50" step="0.1" required>
+            </div>
+            <div class="form-group" style="flex:0.7">
+              <label class="form-label" for="room-unit">Unit</label>
+              <select id="room-unit" class="form-select">
+                <option value="m">m</option>
+                <option value="cm">cm</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px">
+            Apply Room
+          </button>
+        </form>
+
+        <!-- Wall Elements -->
+        <div class="section-title">Wall Elements</div>
+        <div class="action-row">
+          <button type="button" class="btn" id="btn-add-door"><span data-icon="door-open" data-icon-size="14"></span> Door</button>
+          <button type="button" class="btn" id="btn-add-window"><span data-icon="window" data-icon-size="14"></span> Window</button>
+        </div>
+        <div id="wall-elements-list" class="wall-elements-list"></div>
+
+        <!-- Furniture Catalog -->
+        <div class="section-title">Furniture Catalog</div>
+        <div id="furniture-catalog"></div>
+
+        <button type="button" class="btn btn-block" id="btn-add-custom" style="margin-top:8px">
+          <span data-icon="pencil" data-icon-size="14"></span> Custom Furniture
+        </button>
+
+        <!-- Floor Area Info -->
+        <div class="section-title">Floor Area</div>
+        <div id="floor-info">
+          <div class="empty-state" style="padding:12px">Create a room to see area info</div>
+        </div>
+
+        <!-- Auto-Arrange -->
+        <div class="section-title">Smart Layout</div>
+        <button type="button" class="btn btn-auto-arrange btn-block" id="btn-auto-arrange">
+          <span data-icon="sparkles" data-icon-size="16"></span>
+          <span>Susun Otomatis</span>
+        </button>
+        <div class="auto-arrange-hint">Atur posisi furnitur secara otomatis agar nyaman dan rapi</div>
+
+        <!-- Keyboard Shortcuts -->
+        <div class="shortcuts-info">
+          <h4>Shortcuts</h4>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Rotate</span>
+            <span class="shortcut-key">R</span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Delete</span>
+            <span class="shortcut-key">Del</span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Duplicate</span>
+            <span class="shortcut-key">Ctrl+D</span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Zoom</span>
+            <span class="shortcut-key">Scroll</span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Pan</span>
+            <span class="shortcut-key">Mid-Click</span>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Fine Move</span>
+            <span class="shortcut-key">Arrows</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button type="button" class="btn" id="btn-clear-all" title="Clear all furniture"><span data-icon="trash" data-icon-size="14"></span></button>
+        <button type="button" class="btn" id="btn-save-layout" title="Save layout"><span data-icon="save" data-icon-size="14"></span> Save</button>
+        <button type="button" class="btn" id="btn-load-layout" title="Load layout"><span data-icon="folder-open" data-icon-size="14"></span> Load</button>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- ═══ MAIN AREA ═══ -->
+    <main class="main-area">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <button type="button" class="toolbar-btn btn-toggle-sidebar" id="btn-toggle-sidebar" title="Toggle sidebar"><span data-icon="menu" data-icon-size="18"></span></button>
+
+        <div class="toolbar-group">
+          <button type="button" class="toolbar-btn" id="btn-zoom-out" title="Zoom out"><span data-icon="zoom-out" data-icon-size="16"></span></button>
+          <span class="toolbar-label" id="zoom-level">100%</span>
+          <button type="button" class="toolbar-btn" id="btn-zoom-in" title="Zoom in"><span data-icon="zoom-in" data-icon-size="16"></span></button>
+          <button type="button" class="toolbar-btn" id="btn-zoom-fit" title="Fit to view"><span data-icon="maximize" data-icon-size="16"></span></button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <div class="toolbar-group">
+          <button type="button" class="toolbar-btn" id="btn-export-png" title="Export as PNG"><span data-icon="camera" data-icon-size="16"></span></button>
+          <button type="button" class="toolbar-btn" id="btn-export-json" title="Export JSON"><span data-icon="file-text" data-icon-size="16"></span></button>
+          <button type="button" class="toolbar-btn" id="btn-import-json" title="Import JSON"><span data-icon="download" data-icon-size="16"></span></button>
+        </div>
+
+        <div class="toolbar-spacer"></div>
+      </div>
+
+      <!-- Canvas -->
+      <div class="canvas-container" id="canvas-container">
+        <canvas id="main-canvas"></canvas>
+
+        <!-- Property Panel (floating) -->
+        <div class="property-panel" id="property-panel">
+          <div class="prop-header">
+            <div class="prop-color-dot" id="prop-color-dot"></div>
+            <span class="prop-title">Properties</span>
+            <span class="prop-category" id="prop-category"></span>
+          </div>
+
+          <div class="prop-full">
+            <div class="form-group">
+              <label class="form-label" for="prop-name">Name</label>
+              <input type="text" id="prop-name" class="form-input" placeholder="Furniture name">
+            </div>
+          </div>
+
+          <div class="prop-grid">
+            <div class="form-group">
+              <label class="form-label" for="prop-width">Width (m)</label>
+              <input type="number" id="prop-width" class="form-input" min="0.1" step="0.05">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="prop-height">Depth (m)</label>
+              <input type="number" id="prop-height" class="form-input" min="0.1" step="0.05">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="prop-x">X (m)</label>
+              <input type="number" id="prop-x" class="form-input" step="0.05">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="prop-y">Y (m)</label>
+              <input type="number" id="prop-y" class="form-input" step="0.05">
+            </div>
+          </div>
+
+          <div class="prop-full" style="margin-bottom:14px">
+            <div class="form-group">
+              <label class="form-label" for="prop-rotation">Rotation (°)</label>
+              <input type="number" id="prop-rotation" class="form-input" min="0" max="360" step="90">
+            </div>
+          </div>
+
+          <div class="prop-actions">
+            <button type="button" class="btn btn-primary" id="prop-apply">Apply</button>
+            <button type="button" class="btn" id="prop-rotate" title="Rotate 90°"><span data-icon="rotate-cw" data-icon-size="14"></span></button>
+            <button type="button" class="btn" id="prop-duplicate" title="Duplicate"><span data-icon="copy" data-icon-size="14"></span></button>
+            <button type="button" class="btn btn-danger" id="prop-delete" title="Delete"><span data-icon="trash" data-icon-size="14"></span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Welcome Overlay -->
+      <div class="welcome-overlay" id="welcome-overlay">
+        <div class="welcome-icon" data-icon="home" data-icon-size="56"></div>
+        <h1 class="welcome-title">Room Layout Designer</h1>
+        <p class="welcome-desc">
+          Design your room layout interactively. Set room dimensions in the sidebar, then drag and drop furniture to create your perfect floor plan.
+        </p>
+        <div class="welcome-hint">
+          ← Set room dimensions to get started
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ═══ MODALS ═══ -->
+
+  <!-- Custom Furniture Modal -->
+  <div class="modal" id="custom-furniture-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title"><span data-icon="pencil" data-icon-size="18"></span> Custom Furniture</h2>
+        <button class="modal-close"><span data-icon="x" data-icon-size="16"></span></button>
+      </div>
+      <form id="custom-furniture-form">
+        <div class="form-group">
+          <label class="form-label" for="custom-name">Name</label>
+          <input type="text" id="custom-name" class="form-input" placeholder="e.g. Piano" required>
+        </div>
+        <div class="form-row" style="margin-bottom:16px">
+          <div class="form-group" style="flex:1">
+            <label class="form-label" for="custom-width">Width (m)</label>
+            <input type="number" id="custom-width" class="form-input" placeholder="1.0" min="0.1" step="0.05" required>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label" for="custom-height">Depth (m)</label>
+            <input type="number" id="custom-height" class="form-input" placeholder="0.5" min="0.1" step="0.05" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Add Furniture</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Wall Element Modal -->
+  <div class="modal" id="wall-element-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title"><span data-icon="layout-grid" data-icon-size="18"></span> Add Wall Element</h2>
+        <button class="modal-close"><span data-icon="x" data-icon-size="16"></span></button>
+      </div>
+      <form id="wall-element-form">
+        <div class="form-row" style="margin-bottom:12px">
+          <div class="form-group" style="flex:1">
+            <label class="form-label" for="wall-element-type">Type</label>
+            <select id="wall-element-type" class="form-select">
+              <option value="door">Door</option>
+              <option value="window">Window</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label" for="wall-element-wall">Wall</label>
+            <select id="wall-element-wall" class="form-select">
+              <option value="top">Top</option>
+              <option value="right">Right</option>
+              <option value="bottom">Bottom</option>
+              <option value="left">Left</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label" for="wall-element-position">Position along wall (m from start)</label>
+          <input type="number" id="wall-element-position" class="form-input" value="1" min="0" step="0.1" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Add Element</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Save Layout Modal -->
+  <div class="modal" id="save-layout-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title"><span data-icon="save" data-icon-size="18"></span> Save Layout</h2>
+        <button class="modal-close"><span data-icon="x" data-icon-size="16"></span></button>
+      </div>
+      <form id="save-layout-form">
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label" for="layout-name">Layout Name</label>
+          <input type="text" id="layout-name" class="form-input" placeholder="e.g. My Bedroom" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Save</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Load Layout Modal -->
+  <div class="modal" id="load-layout-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title"><span data-icon="folder-open" data-icon-size="18"></span> Saved Layouts</h2>
+        <button class="modal-close"><span data-icon="x" data-icon-size="16"></span></button>
+      </div>
+      <div id="saved-layouts-list">
+        <div class="empty-state">No saved layouts yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ═══ SCRIPTS ═══ -->
+  <script src="js/icons.js"></script>
+  <script src="js/room.js"></script>
+  <script src="js/furniture.js"></script>
+  <script src="js/collision.js"></script>
+  <script src="js/snap.js"></script>
+  <script src="js/zoom.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/interaction.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/autoarrange.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    // Hydrate all data-icon placeholders with SVG icons
+    document.querySelectorAll('[data-icon]').forEach(el => {
+      const name = el.getAttribute('data-icon');
+      const size = parseInt(el.getAttribute('data-icon-size')) || 16;
+      el.innerHTML = Icons.get(name, size);
+    });
+  </script>
+</body>
+</html>
